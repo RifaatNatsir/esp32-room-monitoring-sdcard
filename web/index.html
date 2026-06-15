@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Room Monitoring Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root { --bg-color: #060f1e; --card-bg: #0c182b; --text-main: #ffffff; --text-sub: #778aa2; --shadow: rgba(0, 0, 0, 0.5); }
+        body { background-color: var(--bg-color); font-family: 'Segoe UI', sans-serif; color: var(--text-main); margin: 0; padding: 15px; display: flex; flex-direction: column; align-items: center; box-sizing: border-box; overflow-x: hidden; }
+        .header { display: flex; justify-content: space-between; align-items: center; width: 100%; max-width: 1100px; margin-bottom: 25px; gap: 15px; }
+        .top-widgets-container { display: flex; flex-direction: column; gap: 10px; }
+        .top-widget { background: var(--card-bg); padding: 10px 15px; border-radius: 12px; display: flex; align-items: center; gap: 10px; box-shadow: 0 4px 15px var(--shadow); border: 1px solid #16263f; white-space: nowrap; }
+        .widget-title { font-size: 11px; color: var(--text-sub); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 2px; }
+        .widget-val { font-size: 14px; font-weight: bold; }
+        
+        .wifi-icon { color: #2ecc71; font-size: 20px; } .time-icon { color: #3498db; font-size: 20px; } .hi-icon { color: #e67e22; font-size: 20px; }
+        .wifi-status { color: #2ecc71; } .time-val { color: #3498db; } .hi-val { color: #e67e22; }
+        
+        .main-title-container { text-align: center; flex: 1; }
+        .main-title { font-size: 26px; font-weight: 700; margin: 0; display: flex; align-items: center; justify-content: center; gap: 8px; }
+        .main-subtitle { font-size: 13px; color: var(--text-sub); margin: 5px 0 0 0; }
+        
+        .container { display: flex; justify-content: center; gap: 20px; width: 100%; max-width: 1100px; flex-wrap: wrap; box-sizing: border-box; }
+        .card { background: var(--card-bg); border-radius: 20px; padding: 25px 15px; flex: 1; min-width: 280px; max-width: 520px; box-shadow: 0 10px 30px var(--shadow); border: 1px solid #16263f; box-sizing: border-box; }
+        .card-header { display: flex; justify-content: center; align-items: center; gap: 10px; font-size: 18px; font-weight: 600; margin-bottom: 20px; }
+        
+        .gauge-wrapper { position: relative; width: 260px; height: 130px; margin: 0 auto 15px auto; overflow: hidden; }
+        .gauge-bg-arc { position: absolute; width: 260px; height: 260px; border-radius: 50%; box-sizing: border-box; border: 22px solid #12223a; top: 0; left: 0; }
+        .gauge-color-arc { position: absolute; width: 260px; height: 260px; border-radius: 50%; box-sizing: border-box; top: 0; left: 0; }
+        
+        .temp-color { background: conic-gradient(from 270deg, #2ecc71 0%, #f1c40f 17%, #e67e22 34%, #e74c3c 50%); -webkit-mask: radial-gradient(circle 108px, transparent 100%, #000 100%); mask: radial-gradient(circle 108px, transparent 100%, #000 100%); }
+        .hum-color { background: conic-gradient(from 270deg, #00d2ff 0%, #0088ff 25%, #0044ff 50%, transparent 50%); -webkit-mask: radial-gradient(circle 108px, transparent 100%, #000 100%); mask: radial-gradient(circle 108px, transparent 100%, #000 100%); }
+        
+        .needle { position: absolute; width: 105px; height: 4px; background: #ffffff; top: 128px; left: 130px; transform-origin: 0% 50%; transform: rotate(-180deg); transition: transform 0.8s cubic-bezier(0.4, 0, 0.2, 1); z-index: 5; border-radius: 2px; box-shadow: 0 0 8px rgba(255,255,255,0.6); }
+        .needle-center { position: absolute; width: 14px; height: 14px; background: #ffffff; border-radius: 50%; top: 123px; left: 123px; z-index: 6; box-shadow: 0 2px 5px rgba(0,0,0,0.5); }
+        
+        .value-display { text-align: center; margin-top: 10px; }
+        
+        .main-val { font-size: 52px; font-weight: 700; line-height: 1; }
+        .main-unit { font-size: 18px; color: var(--text-sub); font-weight: 400; vertical-align: super; margin-left: 3px; }
+        
+        .status-box { margin-top: 15px; padding: 10px; border-radius: 10px; text-align: center; background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.05); }
+        .status-title { font-size: 16px; font-weight: 700; margin-bottom: 2px; }
+        .status-desc { font-size: 11px; color: var(--text-sub); }
+        .stats-container { display: flex; justify-content: space-around; background: rgba(255,255,255,0.02); border-radius: 12px; margin-top: 15px; padding: 12px 5px; border: 1px solid rgba(255,255,255,0.04); }
+        
+        .stat-item { text-align: center; flex: 1; }
+        .stat-label { font-size: 10px; color: var(--text-sub); text-transform: uppercase; margin-bottom: 3px; }
+        .stat-value { font-size: 15px; font-weight: 600; color: var(--text-main); }
+        
+        .charts-container { display: flex; justify-content: center; gap: 20px; width: 100%; max-width: 1100px; margin-top: 20px; flex-wrap: wrap; }
+        .chart-card { background: var(--card-bg); border-radius: 20px; padding: 20px; flex: 1; min-width: 280px; box-shadow: 0 10px 30px var(--shadow); border: 1px solid #16263f; box-sizing: border-box; }
+        .chart-header { font-size: 16px; font-weight: 600; margin-bottom: 15px; display: flex; align-items: center; gap: 8px; }
+        .chart-wrapper { position: relative; height: 230px; width: 100%; }
+        
+        .status-dingin  { color: #2ecc71; border-color: rgba(46, 204, 113, 0.3); background: rgba(46, 204, 113, 0.05); }
+        .status-nyaman  { color: #f1c40f; border-color: rgba(241, 196, 15, 0.3); background: rgba(241, 196, 15, 0.05); }
+        .status-hangat  { color: #e67e22; border-color: rgba(230, 126, 34, 0.3); background: rgba(230, 126, 34, 0.05); }
+        .status-panas   { color: #e74c3c; border-color: rgba(231, 76, 60, 0.3); background: rgba(231, 76, 60, 0.05); }
+        .status-kering  { color: #00d2ff; border-color: rgba(0, 210, 255, 0.3); background: rgba(0, 210, 255, 0.05); }
+        .status-ideal   { color: #0088ff; border-color: rgba(0, 136, 255, 0.3); background: rgba(0, 136, 255, 0.05); }
+        .status-lembab  { color: #0044ff; border-color: rgba(0, 68, 255, 0.3); background: rgba(0, 68, 255, 0.05); }
+        
+        .legend-card { background: var(--card-bg); border-radius: 15px; padding: 20px; width: 100%; max-width: 1100px; margin-top: 20px; box-shadow: 0 10px 30px var(--shadow); border: 1px solid #16263f; box-sizing: border-box; display: flex; justify-content: space-around; flex-wrap: wrap; gap: 20px; }
+        .legend-section { flex: 1; min-width: 240px; }
+        .legend-sect-title { font-size: 13px; font-weight: 600; color: var(--text-main); margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
+        .legend-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+        .legend-item { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+        .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+        .legend-label { color: var(--text-sub); margin-top: 1px; }
+        
+        .footer { margin-top: 25px; font-size: 11px; color: var(--text-sub); text-align: center; }
+        @media (max-width: 680px) {
+            body { padding: 10px; } .header { flex-direction: column; gap: 12px; margin-bottom: 15px; } .main-title-container { order: -1; width: 100%; } .main-title { font-size: 22px; } .main-subtitle { font-size: 12px; } .top-widgets-container { width: 100%; } .header .top-widget { width: 100%; justify-content: center; box-sizing: border-box; } .container, .charts-container { gap: 15px; } .card, .chart-card { padding: 20px 10px; } .chart-wrapper { height: 180px; } .legend-grid { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="top-widgets-container">
+            <div class="top-widget"> <span class="wifi-icon">📶</span> <div> <div class="widget-title">WiFi</div> <div class="widget-val wifi-status">Terhubung</div> </div> </div>
+            <div class="top-widget"> <div> <div class="widget-title">Suhu Terasa (Heat Index)</div> <div class="widget-val hi-val" id="hi-val">--.- °C</div> </div> </div>
+        </div>
+        <div class="main-title-container">
+            <h1 class="main-title">🌡 Room Monitoring</h1>
+            <p class="main-subtitle">Monitoring Suhu & Kelembaban Ruangan</p>
+        </div>
+        <div class="top-widgets-container">
+            <div class="top-widget"> <span class="time-icon">🕒</span> <div> <div class="widget-title">Waktu</div> <div class="widget-val time-val" id="live-time">00:00:00</div> </div> </div>
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="card">
+            <div class="card-header"><span style="color:#e74c3c">🌡</span> Suhu Sekarang</div>
+            <div class="gauge-wrapper"> <div class="gauge-bg-arc"></div> <div class="gauge-color-arc temp-color"></div> <div class="needle" id="tempNeedle"></div> <div class="needle-center"></div> </div>
+            <div class="value-display"> <span class="main-val" id="temp-val">--.-</span><span class="main-unit">°C</span> </div>
+            <div class="status-box" id="temp-box"> <div class="status-title" id="temp-status">--</div> <div class="status-desc" id="temp-desc">Membaca data...</div> </div>
+            <div class="stats-container">
+                <div class="stat-item" style="border-right: 1px solid rgba(255,255,255,0.05)"> <div class="stat-label">Min</div> <div class="stat-value" id="t-min" style="color: #2ecc71">--.-</div> </div>
+                <div class="stat-item" style="border-right: 1px solid rgba(255,255,255,0.05)"> <div class="stat-label">Rerata</div> <div class="stat-value" id="t-avg">--.-</div> </div>
+                <div class="stat-item"> <div class="stat-label">Max</div> <div class="stat-value" id="t-max" style="color: #e74c3c">--.-</div> </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header"><span style="color:#3498db">💧</span> Kelembaban Sekarang</div>
+            <div class="gauge-wrapper"> <div class="gauge-bg-arc"></div> <div class="gauge-color-arc hum-color"></div> <div class="needle" id="humNeedle"></div> <div class="needle-center"></div> </div>
+            <div class="value-display"> <span class="main-val" id="hum-val">--.-</span><span class="main-unit">%</span> </div>
+            <div class="status-box" id="hum-box"> <div class="status-title" id="hum-status">--</div> <div class="status-desc" id="hum-desc">Membaca data...</div> </div>
+            <div class="stats-container">
+                <div class="stat-item" style="border-right: 1px solid rgba(255,255,255,0.05)"> <div class="stat-label">Min</div> <div class="stat-value" id="h-min" style="color: #00d2ff">--.-</div> </div>
+                <div class="stat-item" style="border-right: 1px solid rgba(255,255,255,0.05)"> <div class="stat-label">Rerata</div> <div class="stat-value" id="h-avg">--.-</div> </div>
+                <div class="stat-item"> <div class="stat-label">Max</div> <div class="stat-value" id="h-max" style="color: #0044ff">--.-</div> </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="charts-container">
+        <div class="chart-card">
+            <div class="chart-header">Tren Historis Suhu</div>
+            <div class="chart-wrapper"> <canvas id="tempChart"></canvas> </div>
+        </div>
+        <div class="chart-card">
+            <div class="chart-header">Tren Historis Kelembaban</div>
+            <div class="chart-wrapper"> <canvas id="humChart"></canvas> </div>
+        </div>
+    </div>
+
+    <div class="legend-card">
+        <div class="legend-section">
+            <div class="legend-sect-title"><span>🌡</span> Keterangan Suhu</div>
+            <div class="legend-grid">
+                <div class="legend-item"><span class="dot" style="background:#2ecc71"></span><div>10 - 23°C<br><span class="legend-label">Dingin</span></div></div>
+                <div class="legend-item"><span class="dot" style="background:#f1c40f"></span><div>24 - 29°C<br><span class="legend-label">Nyaman</span></div></div>
+                <div class="legend-item"><span class="dot" style="background:#e67e22"></span><div>30 - 35°C<br><span class="legend-label">Hangat</span></div></div>
+                <div class="legend-item"><span class="dot" style="background:#e74c3c"></span><div>36 - 42°C<br><span class="legend-label">Panas</span></div></div>
+            </div>
+        </div>
+        <div class="legend-section">
+            <div class="legend-sect-title"><span>💧</span> Keterangan Kelembaban</div>
+            <div class="legend-grid">
+                <div class="legend-item"><span class="dot" style="background:#00d2ff"></span><div>0 - 40%<br><span class="legend-label">Kering</span></div></div>
+                <div class="legend-item"><span class="dot" style="background:#0088ff"></span><div>41 - 70%<br><span class="legend-label">Ideal</span></div></div>
+                <div class="legend-item"><span class="dot" style="background:#0044ff"></span><div>71 - 100%<br><span class="legend-label">Lembab</span></div></div>
+            </div>
+        </div>
+    </div>
+    <div class="footer"> </div>
+
+    <script>
+        const MAX_DATA_POINTS = 60; 
+        let counterSiklus = 0;      
+        const intervalPolling = 2;  
+
+        const chartOptions = (yLabel, colorHex) => ({
+            responsive: true, maintainAspectRatio: false,
+            scales: {
+                x: { grid: { color: 'rgba(255, 255, 255, 0.03)' }, ticks: { color: '#778aa2', maxRotation: 45, minRotation: 45, font: { size: 10 } } },
+                y: { type: 'linear', display: true, title: { display: true, text: yLabel, color: colorHex }, grid: { color: 'rgba(255, 255, 255, 0.05)' }, ticks: { color: colorHex }, min: null, max: null }
+            },
+            plugins: { legend: { display: false } }
+        });
+
+        const ctxTemp = document.getElementById('tempChart').getContext('2d');
+        const tempChart = new Chart(ctxTemp, { type: 'line', data: { labels: [], datasets: [{ borderColor: '#e74c3c', backgroundColor: 'rgba(231, 76, 60, 0.1)', data: [], tension: 0.2, borderWidth: 2, fill: true }] }, options: chartOptions('Suhu (°C)', '#e74c3c') });
+
+        const ctxHum = document.getElementById('humChart').getContext('2d');
+        const humChart = new Chart(ctxHum, { type: 'line', data: { labels: [], datasets: [{ borderColor: '#3498db', backgroundColor: 'rgba(52, 152, 219, 0.1)', data: [], tension: 0.2, borderWidth: 2, fill: true }] }, options: chartOptions('Kelembaban (%)', '#3498db') });
+
+        function hitungStatistik() {
+            let tData = tempChart.data.datasets[0].data;
+            let hData = humChart.data.datasets[0].data;
+
+            if (tData.length > 0) {
+                let tMin = Math.min(...tData); let tMax = Math.max(...tData); let tAvg = tData.reduce((a, b) => a + b, 0) / tData.length;
+                document.getElementById('t-min').innerText = tMin.toFixed(1) + "°"; document.getElementById('t-max').innerText = tMax.toFixed(1) + "°"; document.getElementById('t-avg').innerText = tAvg.toFixed(1) + "°";
+            }
+            if (hData.length > 0) {
+                let hMin = Math.min(...hData); let hMax = Math.max(...hData); let hAvg = hData.reduce((a, b) => a + b, 0) / hData.length;
+                document.getElementById('h-min').innerText = hMin.toFixed(1) + "%"; document.getElementById('h-max').innerText = hMax.toFixed(1) + "%"; document.getElementById('h-avg').innerText = hAvg.toFixed(1) + "%";
+            }
+        }
+
+        // === FUNGSI FETCH DATA DARI MICRO SD ===
+        async function muatDataHistorisDariSD() {
+            console.log("Mengunduh data historis dari Micro SD lokal...");
+            try {
+                let response = await fetch('/get-csv');
+                if(!response.ok) throw new Error("Gagal mengambil CSV");
+                
+                let teksCSV = await response.text();
+                
+                let barisData = teksCSV.split("\n").filter(baris => baris.trim() !== "" && !baris.includes("Waktu"));
+                
+                // Ambil 60 data terakhir saja agar memori HP/Laptop tidak berat
+                let dataTerbaru = barisData.slice(-MAX_DATA_POINTS);
+                
+                dataTerbaru.forEach(baris => {
+                    let kolom = baris.split(",");
+                    if(kolom.length >= 3) {
+                        tempChart.data.labels.push(kolom[0]);
+                        tempChart.data.datasets[0].data.push(parseFloat(kolom[1]));
+                        humChart.data.labels.push(kolom[0]);
+                        humChart.data.datasets[0].data.push(parseFloat(kolom[2]));
+                    }
+                });
+                
+                tempChart.update();
+                humChart.update();
+                hitungStatistik();
+                console.log("Data Micro SD sukses dimuat (Zero Latency).");
+            } catch (err) {
+                console.error("Micro SD Error:", err);
+            }
+        }
+
+        function getAngle(val, min, max) {
+            val = Math.max(min, Math.min(max, val));
+            return ((val - min) / (max - min) * 180) - 180; 
+        }
+
+        function updateDashboard() {
+            fetch('/data')
+                .then(response => response.json())
+                .then(data => {
+                    if(data.error) return;
+                    let t = data.temp; let h = data.hum; let hi = data.hi; let timeStr = data.time;
+                    
+                    document.getElementById("temp-val").innerText = t.toFixed(1);
+                    document.getElementById("hum-val").innerText = h.toFixed(1);
+                    document.getElementById("hi-val").innerText = hi.toFixed(1) + " °C";
+                    document.getElementById("live-time").innerText = timeStr;
+
+                    document.getElementById("tempNeedle").style.transform = `rotate(${getAngle(t, 10, 42)}deg)`;
+                    document.getElementById("humNeedle").style.transform = `rotate(${getAngle(h, 0, 100)}deg)`;
+
+                    let tBox = document.getElementById("temp-box"); let tStatus = document.getElementById("temp-status"); let tDesc = document.getElementById("temp-desc"); tBox.className = "status-box";
+                    if(t <= 23) { tStatus.innerText = "Dingin"; tDesc.innerText = "Suhu ruangan dingin"; tBox.classList.add("status-dingin"); }
+                    else if(t <= 29) { tStatus.innerText = "Nyaman"; tDesc.innerText = "Suhu ruangan normal"; tBox.classList.add("status-nyaman"); }
+                    else if(t <= 35) { tStatus.innerText = "Hangat"; tDesc.innerText = "Suhu ruangan hangat"; tBox.classList.add("status-hangat"); }
+                    else { tStatus.innerText = "Panas"; tDesc.innerText = "Suhu ruangan tinggi"; tBox.classList.add("status-panas"); }
+
+                    let hBox = document.getElementById("hum-box"); let hStatus = document.getElementById("hum-status"); let hDesc = document.getElementById("hum-desc"); hBox.className = "status-box";
+                    if(h <= 40) { hStatus.innerText = "Kering"; hDesc.innerText = "Kelembaban rendah"; hBox.classList.add("status-kering"); }
+                    else if(h <= 70) { hStatus.innerText = "Ideal"; hDesc.innerText = "Kelembaban normal"; hBox.classList.add("status-ideal"); }
+                    else { hStatus.innerText = "Lembab"; hDesc.innerText = "Kelembaban tinggi"; hBox.classList.add("status-lembab"); }
+
+                    if (counterSiklus === 0 || counterSiklus >= 60) {
+                        counterSiklus = 1; 
+                        let adaDataBaru = false;
+
+                        if(!tempChart.data.labels.includes(timeStr)){
+                            tempChart.data.labels.push(timeStr); tempChart.data.datasets[0].data.push(t);
+                            if (tempChart.data.labels.length > MAX_DATA_POINTS) { tempChart.data.labels.shift(); tempChart.data.datasets[0].data.shift(); }
+                            tempChart.update(); adaDataBaru = true;
+                        }
+
+                        if(!humChart.data.labels.includes(timeStr)){
+                            humChart.data.labels.push(timeStr); humChart.data.datasets[0].data.push(h);
+                            if (humChart.data.labels.length > MAX_DATA_POINTS) { humChart.data.labels.shift(); humChart.data.datasets[0].data.shift(); }
+                            humChart.update(); adaDataBaru = true;
+                        }
+
+                        if(adaDataBaru) hitungStatistik();
+                    } else {
+                        counterSiklus++;
+                    }
+                })
+                .catch(err => console.error("Gagal polling data:", err));
+        }
+
+        async function inisialisasiSistem() {
+            await muatDataHistorisDariSD(); // Panggil fungsi Micro SD saat pertama load
+            updateDashboard();
+            setInterval(updateDashboard, intervalPolling * 1000);
+        }
+
+        inisialisasiSistem();
+    </script>
+</body>
+</html>
