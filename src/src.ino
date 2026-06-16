@@ -20,7 +20,19 @@ Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 #define DHTTYPE DHT22
 DHT dht(DHTPIN, DHTTYPE);
 
-#define SD_CS_PIN 5 // Pin Chip Select untuk Micro SD
+#define SD_CS_PIN 5
+
+// === CONFIG TOMBOL TACTILE ===
+#define BUTTON_PIN 14
+int halamanOLED = 0;
+bool statusTombolTerakhir = HIGH;
+unsigned long waktuDebounceTerakhir = 0;
+const unsigned long jedaDebounce = 50;
+
+unsigned long waktuTombolMulaiDitekan = 0;
+bool sedangDitekan = false;
+bool sudahEksekusiLongPress = false;
+int rotasiLayar = 0; // 0 = Normal, 2 = Rotasi 180 Derajat
 
 // === CONFIG LOG LOKAL (SD CARD) ===
 const unsigned long jedaSimpanSD = 60000;
@@ -31,6 +43,7 @@ const int daylightOffset_sec = 0;
 const char* ntpServer = "id.pool.ntp.org";
 
 WebServer server(80);
+String globalIPAddress = "0.0.0.0";
 
 // === FUNGSI WAKTU ===
 String getFormattedTime() {
@@ -88,28 +101,50 @@ void simpanKeMicroSD(String waktu, float temp, float hum) {
   }
 }
 
-// === FUNGSI LAYAR OLED ===
+// === FUNGSI LAYAR OLED (MENDUKUNG MULTI-HALAMAN) ===
 void updateOLEDDisplay(float temp, float hum, String waktu) {
   display.clearDisplay();
-  display.setTextSize(1);
+  display.setRotation(rotasiLayar);
   display.setTextColor(SSD1306_WHITE);
-  display.setCursor(0, 0);
-  display.print("ROOM MONITORING");
-  display.drawFastHLine(0, 10, 128, SSD1306_WHITE);
   
-  display.setCursor(0, 18);
-  display.print("Suhu: ");
-  if (isnan(temp)) display.print("--");
-  else { display.print(temp, 1); display.print(" C"); }
-  
-  display.setCursor(0, 32);
-  display.print("Lembab: ");
-  if (isnan(hum)) display.print("--");
-  else { display.print(hum, 1); display.print(" %"); }
-  
-  display.drawRect(0, 46, 128, 18, SSD1306_WHITE);
-  display.setCursor(40, 51);
-  display.print(waktu);
+  if (halamanOLED == 0) {
+    // === HALAMAN 1: MONITORING SENSOR ===
+    display.setTextSize(1);
+    display.setCursor(0, 0);
+    display.print("ROOM MONITORING");
+    display.drawFastHLine(0, 10, 128, SSD1306_WHITE);
+    
+    display.setCursor(0, 18);
+    display.print("Suhu: ");
+    if (isnan(temp)) display.print("--");
+    else { display.print(temp, 1); display.print(" C"); }
+    
+    display.setCursor(0, 32);
+    display.print("Lembab: ");
+    if (isnan(hum)) display.print("--");
+    else { display.print(hum, 1); display.print(" %"); }
+    
+    display.drawRect(0, 46, 128, 18, SSD1306_WHITE);
+    display.setCursor(40, 51);
+    display.print(waktu);
+    
+  } else {
+    // === HALAMAN 2: INFORMASI IP ADDRESS ===
+    display.setTextSize(1);
+    display.setCursor(0, 0);
+    display.print("NETWORK INFO");
+    display.drawFastHLine(0, 10, 128, SSD1306_WHITE);
+    
+    display.setCursor(0, 20);
+    display.print("Status: Connected");
+    
+    display.setCursor(0, 35);
+    display.print("IP Address:");
+    
+    display.setCursor(0, 48);
+    display.setTextSize(1);
+    display.print(globalIPAddress);
+  }
   
   display.display();
 }
@@ -174,6 +209,9 @@ void setup() {
   Serial.begin(115200);
   dht.begin();
 
+  // === INISIALISASI TOMBOL ===
+  pinMode(BUTTON_PIN, INPUT_PULLUP);
+
   // === INISIALISASI OLED ===
   if(!display.begin(SSD1306_SWITCHCAPVCC, SCREEN_ADDRESS)) {
     Serial.println(F("OLED tidak terdeteksi. Lanjut tanpa layar OLED..."));
@@ -182,7 +220,7 @@ void setup() {
     display.setTextSize(1);
     display.setTextColor(SSD1306_WHITE);
     display.setCursor(0, 10);
-    display.println("Menyalakan Sistem...");
+    display.println("Inisialisasi... Buka 192.169.4.1");
     display.display();
   }
 
@@ -200,9 +238,9 @@ void setup() {
       ESP.restart();
   }
 
-  String ipAddress = WiFi.localIP().toString(); 
+  globalIPAddress = WiFi.localIP().toString(); 
   Serial.print("ESP32 Terhubung! Alamat IP: ");
-  Serial.println(ipAddress);
+  Serial.println(globalIPAddress);
 
   server.on("/", handleRoot);
   server.on("/data", handleData);
@@ -210,13 +248,116 @@ void setup() {
   
   configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
   server.begin();
+  
+  waktuTerakhirSimpan = millis(); 
 }
+
+unsigned long waktuTerakhirAktivitasTombol = 0;
+bool layarSedangMenyala = true;
+bool statusFadeOutAktif = false;
+const unsigned long jedaScreenSaver = 30000; // 30 detik (30.000 ms)
+const unsigned long durasiFadeOut = 5000; // 5 detik terakhir (5.000 ms)
 
 void loop() {
   server.handleClient();
 
+  bool pembacaanTombol = digitalRead(BUTTON_PIN);
+  
+  if (pembacaanTombol != statusTombolTerakhir) {
+    waktuDebounceTerakhir = millis(); 
+  }
+
+  if ((millis() - waktuDebounceTerakhir) > jedaDebounce) {
+    // Deteksi saat tombol baru mulai ditekan (transisi ke LOW)
+    if (pembacaanTombol == LOW && !sedangDitekan) {
+      sedangDitekan = true;
+      waktuTombolMulaiDitekan = millis();
+      sudahEksekusiLongPress = false;
+
+      // Jika layar sedang mati atau sedang meredup, kembalikan ke terang maksimal
+      if (!layarSedangMenyala || statusFadeOutAktif) {
+        display.ssd1306_command(SSD1306_SETCONTRAST);
+        display.ssd1306_command(127); // 50% dari 100%
+        
+        if (!layarSedangMenyala) {
+          display.ssd1306_command(SSD1306_DISPLAYON);
+          layarSedangMenyala = true;
+        }
+        
+        statusFadeOutAktif = false;
+        waktuTerakhirAktivitasTombol = millis(); 
+        sudahEksekusiLongPress = true; // Kunci agar tekanan pertama tidak memicu ganti halaman
+        
+        updateOLEDDisplay(dht.readTemperature(), dht.readHumidity(), getFormattedTime());
+      }
+
+      waktuTerakhirAktivitasTombol = millis();
+    }
+    
+    // Deteksi saat tombol masih ditahan (mengecek apakah sudah lewat 5 detik)
+    if (pembacaanTombol == LOW && sedangDitekan && !sudahEksekusiLongPress) {
+      if (millis() - waktuTombolMulaiDitekan >= 5000) {
+        // Balik rotasi layar (jika 0 jadi 2, jika 2 jadi 0)
+        rotasiLayar = (rotasiLayar == 0) ? 2 : 0; 
+        sudahEksekusiLongPress = true;
+        Serial.println("[\xE2\x9C\x94] Layar dirotasikan 180 derajat!");
+        
+        float t = dht.readTemperature();
+        float h = dht.readHumidity();
+        updateOLEDDisplay(t, h, getFormattedTime());
+      }
+    }
+
+    // Deteksi saat tombol dilepas (transisi kembali ke HIGH)
+    if (pembacaanTombol == HIGH && sedangDitekan) {
+      sedangDitekan = false;
+      
+      // Jika tombol dilepas SEBELUM mencapai 5 detik, hitung sebagai klik biasa (ganti halaman)
+      if (!sudahEksekusiLongPress) {
+        halamanOLED = !halamanOLED; 
+        Serial.print("Tombol dilepas (Klik Biasa)! Halaman: ");
+        Serial.println(halamanOLED);
+        
+        float t = dht.readTemperature();
+        float h = dht.readHumidity();
+        updateOLEDDisplay(t, h, getFormattedTime());
+      }
+    }
+  }
+  statusTombolTerakhir = pembacaanTombol;
+
+  // === LOGIKA SCREEN SAVER ===
+  if (layarSedangMenyala) {
+    unsigned long waktuBerjalan = millis() - waktuTerakhirAktivitasTombol;
+
+    if (waktuBerjalan >= jedaScreenSaver) {
+      // Matikan layar total dan reset kontras ke normal
+      display.ssd1306_command(SSD1306_DISPLAYOFF);
+      layarSedangMenyala = false;
+      statusFadeOutAktif = false;
+      
+      display.ssd1306_command(SSD1306_SETCONTRAST);
+      display.ssd1306_command(127); // 50% dari 255
+      
+      Serial.println("[💤] Screen Saver Aktif: Layar OLED dimatikan untuk mencegah Burn-In.");
+      
+    } else if (waktuBerjalan >= (jedaScreenSaver - 5000)) { 
+      // 5 detik sebelum mati, langsung set kecerahan ke 10%
+      if (!statusFadeOutAktif) { 
+        statusFadeOutAktif = true;
+        
+        display.ssd1306_command(SSD1306_SETCONTRAST);
+        display.ssd1306_command(25);  // 10% dari 255
+        display.display();
+        
+        Serial.println("[⚠️] Layar diredupkan ke 10%!");
+      }
+    }
+  }
+
+  // === REFRESH LAYAR OLED TIAP 1 DETIK ===
   static unsigned long waktuTerakhirOLED = 0;
-  if (millis() - waktuTerakhirOLED >= 2000) {
+  if ((layarSedangMenyala || statusFadeOutAktif) && (millis() - waktuTerakhirOLED >= 1000)) {
     waktuTerakhirOLED = millis();
     float t = dht.readTemperature();
     float h = dht.readHumidity();
@@ -225,16 +366,18 @@ void loop() {
     updateOLEDDisplay(t, h, jamSekarang);
   }
 
+  // === LENGKAP: DATA LOGGING MICRO SD (1 MENIT) ===
   unsigned long waktuSekarang = millis();
   if (waktuSekarang - waktuTerakhirSimpan >= jedaSimpanSD) {
+    waktuTerakhirSimpan = waktuSekarang; 
+    
     String jamSekarang = getFormattedTime();
 
     if (jamSekarang == "00:00:00") {
       Serial.println("[\xE2\x9A\xA0] Menunda penyimpanan: Memperbarui waktu internet...");
-      return;
+      return; 
     }
 
-    waktuTerakhirSimpan = waktuSekarang;
     float t = dht.readTemperature();
     float h = dht.readHumidity();
 
