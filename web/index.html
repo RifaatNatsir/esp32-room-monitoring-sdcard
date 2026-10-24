@@ -1,298 +1,1473 @@
 <!DOCTYPE html>
 <html lang="id">
+
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Room Monitoring Dashboard</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Room Climate Monitor - ESP32 Telemetry</title>
+    <!-- Google Fonts: Inter & Plus Jakarta Sans -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&amp;family=Plus+Jakarta+Sans:wght@500;600;700;800&amp;display=swap"
+        rel="stylesheet">
+    <!-- Chart.js CDN -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
-        :root { --bg-color: #060f1e; --card-bg: #0c182b; --text-main: #ffffff; --text-sub: #778aa2; --shadow: rgba(0, 0, 0, 0.5); }
-        body { background-color: var(--bg-color); font-family: 'Segoe UI', sans-serif; color: var(--text-main); margin: 0; padding: 15px; display: flex; flex-direction: column; align-items: center; box-sizing: border-box; overflow-x: hidden; }
-        .header { display: flex; justify-content: space-between; align-items: center; width: 100%; max-width: 1100px; margin-bottom: 25px; gap: 15px; }
-        .top-widgets-container { display: flex; flex-direction: column; gap: 10px; }
-        .top-widget { background: var(--card-bg); padding: 10px 15px; border-radius: 12px; display: flex; align-items: center; gap: 10px; box-shadow: 0 4px 15px var(--shadow); border: 1px solid #16263f; white-space: nowrap; }
-        .widget-title { font-size: 11px; color: var(--text-sub); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 2px; }
-        .widget-val { font-size: 14px; font-weight: bold; }
-        
-        .wifi-icon { color: #2ecc71; font-size: 20px; } .time-icon { color: #3498db; font-size: 20px; } .hi-icon { color: #e67e22; font-size: 20px; }
-        .wifi-status { color: #2ecc71; } .time-val { color: #3498db; } .hi-val { color: #e67e22; }
-        
-        .main-title-container { text-align: center; flex: 1; }
-        .main-title { font-size: 26px; font-weight: 700; margin: 0; display: flex; align-items: center; justify-content: center; gap: 8px; }
-        .main-subtitle { font-size: 13px; color: var(--text-sub); margin: 5px 0 0 0; }
-        
-        .container { display: flex; justify-content: center; gap: 20px; width: 100%; max-width: 1100px; flex-wrap: wrap; box-sizing: border-box; }
-        .card { background: var(--card-bg); border-radius: 20px; padding: 25px 15px; flex: 1; min-width: 280px; max-width: 520px; box-shadow: 0 10px 30px var(--shadow); border: 1px solid #16263f; box-sizing: border-box; }
-        .card-header { display: flex; justify-content: center; align-items: center; gap: 10px; font-size: 18px; font-weight: 600; margin-bottom: 20px; }
-        
-        .gauge-wrapper { position: relative; width: 260px; height: 130px; margin: 0 auto 15px auto; overflow: hidden; }
-        .gauge-bg-arc { position: absolute; width: 260px; height: 260px; border-radius: 50%; box-sizing: border-box; border: 22px solid #12223a; top: 0; left: 0; }
-        .gauge-color-arc { position: absolute; width: 260px; height: 260px; border-radius: 50%; box-sizing: border-box; top: 0; left: 0; }
-        
-        .temp-color { background: conic-gradient(from 270deg, #2ecc71 0%, #f1c40f 17%, #e67e22 34%, #e74c3c 50%); -webkit-mask: radial-gradient(circle 108px, transparent 100%, #000 100%); mask: radial-gradient(circle 108px, transparent 100%, #000 100%); }
-        .hum-color { background: conic-gradient(from 270deg, #00d2ff 0%, #0088ff 25%, #0044ff 50%, transparent 50%); -webkit-mask: radial-gradient(circle 108px, transparent 100%, #000 100%); mask: radial-gradient(circle 108px, transparent 100%, #000 100%); }
-        
-        .needle { position: absolute; width: 105px; height: 4px; background: #ffffff; top: 128px; left: 130px; transform-origin: 0% 50%; transform: rotate(-180deg); transition: transform 0.8s cubic-bezier(0.4, 0, 0.2, 1); z-index: 5; border-radius: 2px; box-shadow: 0 0 8px rgba(255,255,255,0.6); }
-        .needle-center { position: absolute; width: 14px; height: 14px; background: #ffffff; border-radius: 50%; top: 123px; left: 123px; z-index: 6; box-shadow: 0 2px 5px rgba(0,0,0,0.5); }
-        
-        .value-display { text-align: center; margin-top: 10px; }
-        
-        .main-val { font-size: 52px; font-weight: 700; line-height: 1; }
-        .main-unit { font-size: 18px; color: var(--text-sub); font-weight: 400; vertical-align: super; margin-left: 3px; }
-        
-        .status-box { margin-top: 15px; padding: 10px; border-radius: 10px; text-align: center; background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.05); }
-        .status-title { font-size: 16px; font-weight: 700; margin-bottom: 2px; }
-        .status-desc { font-size: 11px; color: var(--text-sub); }
-        .stats-container { display: flex; justify-content: space-around; background: rgba(255,255,255,0.02); border-radius: 12px; margin-top: 15px; padding: 12px 5px; border: 1px solid rgba(255,255,255,0.04); }
-        
-        .stat-item { text-align: center; flex: 1; }
-        .stat-label { font-size: 10px; color: var(--text-sub); text-transform: uppercase; margin-bottom: 3px; }
-        .stat-value { font-size: 15px; font-weight: 600; color: var(--text-main); }
-        
-        .charts-container { display: flex; justify-content: center; gap: 20px; width: 100%; max-width: 1100px; margin-top: 20px; flex-wrap: wrap; }
-        .chart-card { background: var(--card-bg); border-radius: 20px; padding: 20px; flex: 1; min-width: 280px; box-shadow: 0 10px 30px var(--shadow); border: 1px solid #16263f; box-sizing: border-box; }
-        .chart-header { font-size: 16px; font-weight: 600; margin-bottom: 15px; display: flex; align-items: center; gap: 8px; }
-        .chart-wrapper { position: relative; height: 230px; width: 100%; }
-        
-        .status-dingin  { color: #2ecc71; border-color: rgba(46, 204, 113, 0.3); background: rgba(46, 204, 113, 0.05); }
-        .status-nyaman  { color: #f1c40f; border-color: rgba(241, 196, 15, 0.3); background: rgba(241, 196, 15, 0.05); }
-        .status-hangat  { color: #e67e22; border-color: rgba(230, 126, 34, 0.3); background: rgba(230, 126, 34, 0.05); }
-        .status-panas   { color: #e74c3c; border-color: rgba(231, 76, 60, 0.3); background: rgba(231, 76, 60, 0.05); }
-        .status-kering  { color: #00d2ff; border-color: rgba(0, 210, 255, 0.3); background: rgba(0, 210, 255, 0.05); }
-        .status-ideal   { color: #0088ff; border-color: rgba(0, 136, 255, 0.3); background: rgba(0, 136, 255, 0.05); }
-        .status-lembab  { color: #0044ff; border-color: rgba(0, 68, 255, 0.3); background: rgba(0, 68, 255, 0.05); }
-        
-        .legend-card { background: var(--card-bg); border-radius: 15px; padding: 20px; width: 100%; max-width: 1100px; margin-top: 20px; box-shadow: 0 10px 30px var(--shadow); border: 1px solid #16263f; box-sizing: border-box; display: flex; justify-content: space-around; flex-wrap: wrap; gap: 20px; }
-        .legend-section { flex: 1; min-width: 240px; }
-        .legend-sect-title { font-size: 13px; font-weight: 600; color: var(--text-main); margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
-        .legend-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
-        .legend-item { display: flex; align-items: center; gap: 8px; font-size: 12px; }
-        .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
-        .legend-label { color: var(--text-sub); margin-top: 1px; }
-        
-        .footer { margin-top: 25px; font-size: 11px; color: var(--text-sub); text-align: center; }
-        @media (max-width: 680px) {
-            body { padding: 10px; } .header { flex-direction: column; gap: 12px; margin-bottom: 15px; } .main-title-container { order: -1; width: 100%; } .main-title { font-size: 22px; } .main-subtitle { font-size: 12px; } .top-widgets-container { width: 100%; } .header .top-widget { width: 100%; justify-content: center; box-sizing: border-box; } .container, .charts-container { gap: 15px; } .card, .chart-card { padding: 20px 10px; } .chart-wrapper { height: 180px; } .legend-grid { grid-template-columns: 1fr; }
+        :root {
+            --bg-dark: #080d1a;
+            --bg-gradient: radial-gradient(circle at top center, #0f1c38 0%, #080d1a 65%, #050811 100%);
+            --glass-bg: rgba(16, 24, 45, 0.65);
+            --glass-border: 1px solid rgba(255, 255, 255, 0.08);
+            --glass-hover: rgba(22, 34, 64, 0.8);
+
+            --temp-gradient: linear-gradient(135deg, #ff4e50 0%, #f9d423 100%);
+            --temp-accent: #ff5252;
+            --temp-glow: rgba(255, 78, 80, 0.35);
+
+            --hum-gradient: linear-gradient(135deg, #00c6ff 0%, #0072ff 100%);
+            --hum-accent: #00b4d8;
+            --hum-glow: rgba(0, 198, 255, 0.35);
+
+            --amber-accent: #f59e0b;
+            --green-live: #10b981;
+            --green-glow: rgba(16, 185, 129, 0.4);
+
+            --text-main: #f1f5f9;
+            --text-muted: #94a3b8;
+            --text-dim: #64748b;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg-dark);
+            background-image: var(--bg-gradient);
+            background-attachment: fixed;
+            color: var(--text-main);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+            overflow-x: hidden;
+            padding-bottom: 40px;
+        }
+
+        /* Subtle Futuristic Ambient Glow Orbs in Background */
+        .ambient-glow-1 {
+            position: fixed;
+            top: -150px;
+            left: 15%;
+            width: 500px;
+            height: 500px;
+            background: radial-gradient(circle, rgba(0, 198, 255, 0.08) 0%, transparent 70%);
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        .ambient-glow-2 {
+            position: fixed;
+            top: 200px;
+            right: 5%;
+            width: 600px;
+            height: 600px;
+            background: radial-gradient(circle, rgba(255, 78, 80, 0.07) 0%, transparent 70%);
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 1380px;
+            margin: 0 auto;
+            padding: 24px 32px;
+            position: relative;
+            z-index: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 24px;
+        }
+
+        /* Glassmorphism Generic Card */
+        .glass-card {
+            background: var(--glass-bg);
+            backdrop-filter: blur(18px);
+            -webkit-backdrop-filter: blur(18px);
+            border: var(--glass-border);
+            border-radius: 20px;
+            box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.5), inset 0 1px 1px rgba(255, 255, 255, 0.1);
+            transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .glass-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.15), transparent);
+        }
+
+        /* Top Bar Header */
+        .top-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 16px 28px;
+            gap: 20px;
+        }
+
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 14px;
+            background: rgba(16, 185, 129, 0.12);
+            border: 1px solid rgba(16, 185, 129, 0.3);
+            border-radius: 9999px;
+            font-size: 13px;
+            font-weight: 600;
+            color: #34d399;
+            letter-spacing: 0.02em;
+        }
+
+        .pulse-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background-color: var(--green-live);
+            box-shadow: 0 0 10px var(--green-live);
+            animation: pulse-ring 2s infinite ease-out;
+        }
+
+        @keyframes pulse-ring {
+            0% {
+                transform: scale(0.95);
+                box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7);
+            }
+
+            70% {
+                transform: scale(1);
+                box-shadow: 0 0 0 7px rgba(16, 185, 129, 0);
+            }
+
+            100% {
+                transform: scale(0.95);
+                box-shadow: 0 0 0 0 rgba(16, 185, 129, 0);
+            }
+        }
+
+        .heat-index-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 14px;
+            background: rgba(245, 158, 11, 0.12);
+            border: 1px solid rgba(245, 158, 11, 0.3);
+            border-radius: 9999px;
+            font-size: 13px;
+            font-weight: 500;
+            color: #fbbf24;
+        }
+
+        .heat-index-badge strong {
+            font-weight: 700;
+            color: #fef08a;
+        }
+
+        .header-center {
+            text-align: center;
+        }
+
+        .dashboard-title {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            font-size: 24px;
+            font-weight: 800;
+            letter-spacing: -0.02em;
+            background: linear-gradient(180deg, #ffffff 0%, #cbd5e1 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+
+        .dashboard-subtitle {
+            font-size: 12px;
+            color: var(--text-muted);
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            font-weight: 600;
+            margin-top: 3px;
+        }
+
+        .header-right {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+        }
+
+        .clock-widget {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            background: rgba(255, 255, 255, 0.04);
+            padding: 8px 18px;
+            border-radius: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.06);
+        }
+
+        .clock-icon {
+            color: #38bdf8;
+            width: 18px;
+            height: 18px;
+        }
+
+        .clock-time {
+            font-family: 'Plus Jakarta Sans', monospace;
+            font-size: 15px;
+            font-weight: 700;
+            color: #e2e8f0;
+            letter-spacing: 0.04em;
+        }
+
+        .sd-badge {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 12px;
+            background: rgba(56, 189, 248, 0.1);
+            border: 1px solid rgba(56, 189, 248, 0.25);
+            border-radius: 8px;
+            font-size: 12px;
+            font-weight: 600;
+            color: #7dd3fc;
+        }
+
+        /* Gauges Grid Layout */
+        .gauges-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 24px;
+        }
+
+        .card-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 20px 24px 10px 24px;
+        }
+
+        .card-title-wrap {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .icon-badge {
+            width: 40px;
+            height: 40px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+        }
+
+        .temp-icon-badge {
+            background: rgba(255, 78, 80, 0.15);
+            border: 1px solid rgba(255, 78, 80, 0.3);
+            color: #ff6b6b;
+            box-shadow: 0 0 15px rgba(255, 78, 80, 0.2);
+        }
+
+        .hum-icon-badge {
+            background: rgba(0, 198, 255, 0.15);
+            border: 1px solid rgba(0, 198, 255, 0.3);
+            color: #38bdf8;
+            box-shadow: 0 0 15px rgba(0, 198, 255, 0.2);
+        }
+
+        .card-heading {
+            font-size: 17px;
+            font-weight: 700;
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            letter-spacing: -0.01em;
+        }
+
+        .card-subtext {
+            font-size: 12px;
+            color: var(--text-dim);
+        }
+
+        .live-tag {
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            padding: 4px 9px;
+            border-radius: 6px;
+            background: rgba(255, 255, 255, 0.05);
+            color: var(--text-muted);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        /* Gauge Body */
+        .gauge-wrapper {
+            padding: 10px 24px 20px 24px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .gauge-stage {
+            position: relative;
+            width: 280px;
+            height: 155px;
+            display: flex;
+            justify-content: center;
+            align-items: flex-end;
+            margin-top: 10px;
+        }
+
+        .gauge-svg {
+            width: 280px;
+            height: 150px;
+            overflow: visible;
+        }
+
+        /* SVG Speedometer Gauge Styles */
+        .gauge-track {
+            fill: none;
+            stroke: rgba(255, 255, 255, 0.07);
+            stroke-width: 14;
+            stroke-linecap: round;
+        }
+
+        .gauge-progress-temp {
+            fill: none;
+            stroke: url(#tempGaugeGradient);
+            stroke-width: 14;
+            stroke-linecap: round;
+            stroke-dasharray: 283;
+            stroke-dashoffset: 85;
+            /* dynamic */
+            filter: drop-shadow(0 0 8px rgba(255, 78, 80, 0.4));
+            transition: stroke-dashoffset 0.8s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+
+        .gauge-progress-hum {
+            fill: none;
+            stroke: url(#humGaugeGradient);
+            stroke-width: 14;
+            stroke-linecap: round;
+            stroke-dasharray: 283;
+            stroke-dashoffset: 100;
+            /* dynamic */
+            filter: drop-shadow(0 0 8px rgba(0, 198, 255, 0.45));
+            transition: stroke-dashoffset 0.8s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+
+        .gauge-needle {
+            transform-origin: 140px 140px;
+            transition: transform 0.8s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+
+        .needle-pin {
+            fill: #ffffff;
+            filter: drop-shadow(0 2px 5px rgba(0, 0, 0, 0.8));
+        }
+
+        .gauge-ticks text {
+            font-size: 10px;
+            fill: var(--text-dim);
+            font-weight: 600;
+            font-family: 'Inter', sans-serif;
+        }
+
+        /* Central Big Value Readout */
+        .big-value-display {
+            margin-top: -10px;
+            text-align: center;
+            display: flex;
+            align-items: baseline;
+            justify-content: center;
+            gap: 4px;
+        }
+
+        .big-number {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            font-size: 56px;
+            font-weight: 800;
+            letter-spacing: -0.03em;
+            line-height: 1;
+        }
+
+        .temp-number {
+            background: var(--temp-gradient);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            filter: drop-shadow(0 4px 15px rgba(255, 78, 80, 0.3));
+        }
+
+        .hum-number {
+            background: var(--hum-gradient);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            filter: drop-shadow(0 4px 15px rgba(0, 198, 255, 0.3));
+        }
+
+        .unit-label {
+            font-size: 22px;
+            font-weight: 700;
+            color: var(--text-muted);
+        }
+
+        /* Condition Status Box */
+        .condition-box {
+            margin-top: 14px;
+            width: 100%;
+            max-width: 440px;
+            padding: 12px 18px;
+            border-radius: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border: 1px solid transparent;
+            transition: all 0.3s ease;
+        }
+
+        .condition-temp {
+            background: rgba(255, 78, 80, 0.08);
+            border-color: rgba(255, 78, 80, 0.2);
+        }
+
+        .condition-hum {
+            background: rgba(0, 198, 255, 0.08);
+            border-color: rgba(0, 198, 255, 0.2);
+        }
+
+        .condition-info {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        .condition-title {
+            font-size: 13.5px;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .condition-desc {
+            font-size: 12px;
+            color: var(--text-muted);
+            line-height: 1.4;
+        }
+
+        .condition-pill {
+            font-size: 11px;
+            font-weight: 700;
+            padding: 4px 10px;
+            border-radius: 20px;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+            white-space: nowrap;
+        }
+
+        .pill-temp {
+            background: rgba(255, 78, 80, 0.2);
+            color: #ff8585;
+            border: 1px solid rgba(255, 78, 80, 0.35);
+        }
+
+        .pill-hum {
+            background: rgba(0, 198, 255, 0.2);
+            color: #70d6ff;
+            border: 1px solid rgba(0, 198, 255, 0.35);
+        }
+
+        /* Mini Stat Row */
+        .mini-stat-row {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 12px;
+            width: 100%;
+            margin-top: 18px;
+            padding-top: 16px;
+            border-top: 1px solid rgba(255, 255, 255, 0.06);
+        }
+
+        .mini-stat-card {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: 12px;
+            padding: 10px 12px;
+            text-align: center;
+            transition: background 0.2s ease;
+        }
+
+        .mini-stat-card:hover {
+            background: rgba(255, 255, 255, 0.06);
+        }
+
+        .mini-stat-label {
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--text-dim);
+            margin-bottom: 4px;
+        }
+
+        .mini-stat-value {
+            font-family: 'Plus Jakarta Sans', monospace;
+            font-size: 16px;
+            font-weight: 700;
+            color: #f8fafc;
+        }
+
+        /* Charts Analytics Section */
+        .charts-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 24px;
+        }
+
+        .chart-card-inner {
+            padding: 20px 24px 24px 24px;
+        }
+
+        .chart-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 18px;
+        }
+
+        .chart-title-wrap {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .chart-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+        }
+
+        .dot-temp {
+            background: #ff5252;
+            box-shadow: 0 0 8px rgba(255, 82, 82, 0.7);
+        }
+
+        .dot-hum {
+            background: #00c6ff;
+            box-shadow: 0 0 8px rgba(0, 198, 255, 0.7);
+        }
+
+        .chart-title {
+            font-size: 15px;
+            font-weight: 700;
+            color: #e2e8f0;
+            font-family: 'Plus Jakarta Sans', sans-serif;
+        }
+
+        .chart-badge {
+            font-size: 11px;
+            font-weight: 600;
+            padding: 4px 10px;
+            border-radius: 6px;
+            background: rgba(255, 255, 255, 0.05);
+            color: var(--text-muted);
+            border: 1px solid rgba(255, 255, 255, 0.07);
+        }
+
+        .chart-canvas-container {
+            position: relative;
+            height: 220px;
+            width: 100%;
+        }
+
+        /* Threshold & Parameter Legend Panel */
+        .legend-card {
+            padding: 22px 28px;
+        }
+
+        .legend-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 16px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+            padding-bottom: 12px;
+        }
+
+        .legend-title {
+            font-size: 14px;
+            font-weight: 700;
+            color: var(--text-main);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+        }
+
+        .legend-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 28px;
+        }
+
+        .legend-column-title {
+            font-size: 12px;
+            font-weight: 700;
+            color: var(--text-muted);
+            margin-bottom: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .legend-items {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 10px;
+        }
+
+        .legend-pill-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            background: rgba(255, 255, 255, 0.03);
+            padding: 8px 12px;
+            border-radius: 10px;
+            border: 1px solid rgba(255, 255, 255, 0.04);
+        }
+
+        .legend-dot {
+            width: 9px;
+            height: 9px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+
+        .legend-name {
+            font-size: 12px;
+            font-weight: 600;
+            color: #e2e8f0;
+        }
+
+        .legend-range {
+            font-size: 11px;
+            color: var(--text-dim);
+            margin-left: auto;
+            font-family: monospace;
+        }
+
+        /* Footer Info */
+        .system-footer {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 12px 16px;
+            font-size: 12px;
+            color: var(--text-dim);
+        }
+
+        .footer-left {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .footer-tag {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        /* Responsive Breakdown */
+        @media (max-width: 1024px) {
+
+            .gauges-grid,
+            .charts-grid,
+            .legend-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .top-header {
+                flex-direction: column;
+                text-align: center;
+                gap: 14px;
+            }
+
+            .header-left,
+            .header-right {
+                justify-content: center;
+            }
+        }
+
+        @media (max-width: 640px) {
+            .container {
+                padding: 16px 12px;
+            }
+
+            .legend-items {
+                grid-template-columns: 1fr;
+            }
+
+            .big-number {
+                font-size: 46px;
+            }
+
+            .gauge-stage {
+                width: 240px;
+                height: 135px;
+            }
+
+            .gauge-svg {
+                width: 240px;
+                height: 130px;
+            }
         }
     </style>
 </head>
+
 <body>
-    <div class="header">
-        <div class="top-widgets-container">
-            <div class="top-widget"> <span class="wifi-icon">📶</span> <div> <div class="widget-title">WiFi</div> <div class="widget-val wifi-status">Terhubung</div> </div> </div>
-            <div class="top-widget"> <div> <div class="widget-title">Suhu Terasa (Heat Index)</div> <div class="widget-val hi-val" id="hi-val">--.- °C</div> </div> </div>
-        </div>
-        <div class="main-title-container">
-            <h1 class="main-title">🌡 Room Monitoring</h1>
-            <p class="main-subtitle">Monitoring Suhu & Kelembaban Ruangan</p>
-        </div>
-        <div class="top-widgets-container">
-            <div class="top-widget"> <span class="time-icon">🕒</span> <div> <div class="widget-title">Waktu</div> <div class="widget-val time-val" id="live-time">00:00:00</div> </div> </div>
-        </div>
-    </div>
+
+    <!-- Ambient Light Orbs -->
+    <div class="ambient-glow-1"></div>
+    <div class="ambient-glow-2"></div>
 
     <div class="container">
-        <div class="card">
-            <div class="card-header"><span style="color:#e74c3c">🌡</span> Suhu Sekarang</div>
-            <div class="gauge-wrapper"> <div class="gauge-bg-arc"></div> <div class="gauge-color-arc temp-color"></div> <div class="needle" id="tempNeedle"></div> <div class="needle-center"></div> </div>
-            <div class="value-display"> <span class="main-val" id="temp-val">--.-</span><span class="main-unit">°C</span> </div>
-            <div class="status-box" id="temp-box"> <div class="status-title" id="temp-status">--</div> <div class="status-desc" id="temp-desc">Membaca data...</div> </div>
-            <div class="stats-container">
-                <div class="stat-item" style="border-right: 1px solid rgba(255,255,255,0.05)"> <div class="stat-label">Min</div> <div class="stat-value" id="t-min" style="color: #2ecc71">--.-</div> </div>
-                <div class="stat-item" style="border-right: 1px solid rgba(255,255,255,0.05)"> <div class="stat-label">Rerata</div> <div class="stat-value" id="t-avg">--.-</div> </div>
-                <div class="stat-item"> <div class="stat-label">Max</div> <div class="stat-value" id="t-max" style="color: #e74c3c">--.-</div> </div>
+
+        <!-- 1. Top Bar / Header -->
+        <header class="glass-card top-header">
+            <!-- Left: WiFi Badge & Heat Index -->
+            <div class="header-left">
+                <div class="status-badge">
+                    <span class="pulse-dot"></span>
+                    <span class="">WiFi Online</span>
+                </div>
+                <div class="heat-index-badge">
+                    <span class="">Suhu Terasa:</span>
+                    <strong id="hi-val">28.4°C</strong>
+                </div>
             </div>
-        </div>
 
-        <div class="card">
-            <div class="card-header"><span style="color:#3498db">💧</span> Kelembaban Sekarang</div>
-            <div class="gauge-wrapper"> <div class="gauge-bg-arc"></div> <div class="gauge-color-arc hum-color"></div> <div class="needle" id="humNeedle"></div> <div class="needle-center"></div> </div>
-            <div class="value-display"> <span class="main-val" id="hum-val">--.-</span><span class="main-unit">%</span> </div>
-            <div class="status-box" id="hum-box"> <div class="status-title" id="hum-status">--</div> <div class="status-desc" id="hum-desc">Membaca data...</div> </div>
-            <div class="stats-container">
-                <div class="stat-item" style="border-right: 1px solid rgba(255,255,255,0.05)"> <div class="stat-label">Min</div> <div class="stat-value" id="h-min" style="color: #00d2ff">--.-</div> </div>
-                <div class="stat-item" style="border-right: 1px solid rgba(255,255,255,0.05)"> <div class="stat-label">Rerata</div> <div class="stat-value" id="h-avg">--.-</div> </div>
-                <div class="stat-item"> <div class="stat-label">Max</div> <div class="stat-value" id="h-max" style="color: #0044ff">--.-</div> </div>
+            <!-- Center: Title -->
+            <div class="header-center">
+                <h1 class="dashboard-title">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
+                        stroke-linecap="round" stroke-linejoin="round" style="color: #38bdf8;">
+                        <path d="M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4.5 4.5 0 1 0 5 0z"></path>
+                    </svg>
+                    Room Climate Monitor
+                </h1>
+                <div class="dashboard-subtitle">ESP32 Real-Time MicroSD Telemetry</div>
             </div>
-        </div>
-    </div>
 
-    <div class="charts-container">
-        <div class="chart-card">
-            <div class="chart-header">Tren Historis Suhu</div>
-            <div class="chart-wrapper"> <canvas id="tempChart"></canvas> </div>
-        </div>
-        <div class="chart-card">
-            <div class="chart-header">Tren Historis Kelembaban</div>
-            <div class="chart-wrapper"> <canvas id="humChart"></canvas> </div>
-        </div>
-    </div>
+            <!-- Right: Clock Widget & SD Indicator -->
+            <div class="header-right">
+                <div class="sd-badge">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M6 2v20h12V8l-6-6H6z"></path>
+                        <path d="M14 2v6h6"></path>
+                        <path d="M10 12v6"></path>
+                        <path d="M14 12v6"></path>
+                    </svg>
+                    <span class="">SD Active (1s Log)</span>
+                </div>
+                <div class="clock-widget">
+                    <svg class="clock-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <polyline points="12 6 12 12 16 14"></polyline>
+                    </svg>
+                    <span id="live-time" class="clock-time">00:24:45 WIB</span>
+                </div>
+            </div>
+        </header>
 
-    <div class="legend-card">
-        <div class="legend-section">
-            <div class="legend-sect-title"><span>🌡</span> Keterangan Suhu</div>
+        <!-- 2. Real-Time Gauges Grid -->
+        <main class="gauges-grid">
+
+            <!-- Card 1: Temperature -->
+            <section class="glass-card">
+                <div class="card-header">
+                    <div class="card-title-wrap">
+                        <div class="icon-badge temp-icon-badge">
+                            🌡
+                        </div>
+                        <div>
+                            <h2 class="card-heading">Suhu Ruangan</h2>
+                            <span class="card-subtext">DHT22 High-Precision Sensor</span>
+                        </div>
+                    </div>
+                    <span class="live-tag">Live Stream</span>
+                </div>
+
+                <div class="gauge-wrapper">
+                    <!-- Speedometer SVG Gauge -->
+                    <div class="gauge-stage"><svg class="gauge-svg" viewBox="0 0 280 160">
+                            <defs>
+                                <linearGradient id="tempGaugeGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                                    <stop offset="0%" stop-color="#38bdf8"></stop>
+                                    <stop offset="30%" stop-color="#10b981"></stop>
+                                    <stop offset="65%" stop-color="#f59e0b"></stop>
+                                    <stop offset="100%" stop-color="#ff4e50"></stop>
+                                </linearGradient>
+                            </defs>
+                            <path class="gauge-track" d="M 30,140 A 110,110 0 0,1 250,140"></path>
+                            <path id="tempArc" class="gauge-progress-temp" d="M 30,140 A 110,110 0 0,1 250,140"
+                                style="stroke-dashoffset: 152.82;"></path>
+                            <g class="gauge-ticks" fill="#94a3b8" font-size="10" font-family="Inter, sans-serif"
+                                font-weight="600"><text x="24" y="156" text-anchor="middle">0°C</text><text x="62"
+                                    y="62" text-anchor="middle">15°C</text><text x="140" y="20"
+                                    text-anchor="middle">30°C</text><text x="218" y="62"
+                                    text-anchor="middle">45°C</text><text x="256" y="156"
+                                    text-anchor="middle">60°C</text></g>
+                            <g id="tempNeedle" class="gauge-needle" style="transform: rotate(-7.2deg);">
+                                <line x1="140" y1="140" x2="140" y2="42" stroke="#ff5252" stroke-width="3"
+                                    stroke-linecap="round"></line>
+                                <circle cx="140" cy="140" r="7" class="needle-pin"></circle>
+                                <circle cx="140" cy="140" r="3" fill="#ff5252"></circle>
+                            </g>
+                        </svg></div>
+
+                    <!-- Big Value Readout -->
+                    <div class="big-value-display"
+                        style="position: relative; z-index: 2; margin-top: -18px; padding: 6px 20px 8px; background: radial-gradient(rgba(30, 18, 28, 0.75) 0%, rgba(12, 16, 30, 0.85) 100%); border: 1px solid rgba(255, 78, 80, 0.3); border-radius: 9999px; box-shadow: rgba(255, 78, 80, 0.25) 0px 4px 24px -2px, rgba(255, 255, 255, 0.15) 0px 1px 1px inset; backdrop-filter: blur(12px); display: inline-flex; align-items: baseline; justify-content: center; gap: 4px;">
+                        <span id="temp-val" class="big-number temp-number"
+                            style="font-family: 'Plus Jakarta Sans', monospace; font-size: 58px; font-weight: 800; letter-spacing: -0.04em; line-height: 1; text-shadow: 0 0 20px rgba(255, 78, 80, 0.5), 0 0 40px rgba(255, 78, 80, 0.2);">27.6</span><span
+                            class="unit-label"
+                            style="font-size: 24px; font-weight: 700; color: #ff9b9b; opacity: 0.9; margin-left: 2px; text-shadow: 0 0 12px rgba(255, 78, 80, 0.4);">°C</span>
+                    </div>
+
+                    <!-- Condition Status Box -->
+                    <div id="temp-box" class="condition-box condition-temp">
+                        <div class="condition-info">
+                            <span id="temp-status" class="condition-title" style="color: #ff8585;">
+                                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                    stroke-width="2.5">
+                                    <path
+                                        d="M12 2v4m0 12v4M4.93 4.93l2.83 2.83m8.48 8.48l2.83 2.83M2 12h4m12 0h4M4.93 19.07l2.83-2.83m8.48-8.48l2.83-2.83">
+                                    </path>
+                                </svg>
+                                Optimal / Nyaman
+                            </span>
+                            <span id="temp-desc" class="condition-desc">Temperatur ruangan dalam rentang normal dan
+                                sejuk.</span>
+                        </div>
+                        <span class="condition-pill pill-temp">Normal</span>
+                    </div>
+
+                    <!-- Mini Stat Row -->
+                    <div class="mini-stat-row">
+                        <div class="mini-stat-card">
+                            <div class="mini-stat-label">Min (24 Jam)</div>
+                            <div id="t-min" class="mini-stat-value">24.1 °C</div>
+                        </div>
+                        <div class="mini-stat-card">
+                            <div class="mini-stat-label">Rerata</div>
+                            <div id="t-avg" class="mini-stat-value">26.8 °C</div>
+                        </div>
+                        <div class="mini-stat-card">
+                            <div class="mini-stat-label">Max (24 Jam)</div>
+                            <div id="t-max" class="mini-stat-value">29.4 °C</div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Card 2: Humidity -->
+            <section class="glass-card">
+                <div class="card-header">
+                    <div class="card-title-wrap">
+                        <div class="icon-badge hum-icon-badge">
+                            💧
+                        </div>
+                        <div>
+                            <h2 class="card-heading">Kelembaban Udara</h2>
+                            <span class="card-subtext">Relative Humidity (RH)</span>
+                        </div>
+                    </div>
+                    <span class="live-tag">Live Stream</span>
+                </div>
+
+                <div class="gauge-wrapper">
+                    <!-- Speedometer SVG Gauge -->
+                    <div class="gauge-stage">
+                        <svg class="gauge-svg" viewBox="0 0 280 160">
+                            <defs>
+                                <linearGradient id="humGaugeGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                                    <stop offset="0%" stop-color="#38bdf8"></stop>
+                                    <stop offset="60%" stop-color="#0072ff"></stop>
+                                    <stop offset="100%" stop-color="#00c6ff"></stop>
+                                </linearGradient>
+                            </defs>
+
+                            <!-- Track background arc -->
+                            <path class="gauge-track" d="M 30,140 A 110,110 0 0,1 250,140"></path>
+
+                            <!-- Gauge Active Arc -->
+                            <path id="humArc" class="gauge-progress-hum" d="M 30,140 A 110,110 0 0,1 250,140"
+                                style="stroke-dashoffset: 107.54;"></path>
+
+                            <!-- Gauge Ticks -->
+                            <g class="gauge-ticks"><text x="24" y="156" text-anchor="middle">0%</text><text x="62"
+                                    y="62" text-anchor="middle">25%</text><text x="140" y="20"
+                                    text-anchor="middle">50%</text><text x="218" y="62"
+                                    text-anchor="middle">75%</text><text x="256" y="156"
+                                    text-anchor="middle">100%</text></g>
+
+                            <!-- Needle (pivot at center 140, 140) -->
+                            <g id="humNeedle" class="gauge-needle" style="transform: rotate(21.6deg);">
+                                <line x1="140" y1="140" x2="140" y2="42" stroke="#00c6ff" stroke-width="3"
+                                    stroke-linecap="round"></line>
+                                <circle cx="140" cy="140" r="7" class="needle-pin"></circle>
+                                <circle cx="140" cy="140" r="3" fill="#00c6ff"></circle>
+                            </g>
+                        </svg>
+                    </div>
+
+                    <!-- Big Value Readout -->
+                    <div class="big-value-display"
+                        style="position: relative; z-index: 2; margin-top: -18px; padding: 6px 20px 8px; background: radial-gradient(rgba(10, 26, 46, 0.75) 0%, rgba(12, 16, 30, 0.85) 100%); border: 1px solid rgba(0, 198, 255, 0.3); border-radius: 9999px; box-shadow: rgba(0, 198, 255, 0.25) 0px 4px 24px -2px, rgba(255, 255, 255, 0.15) 0px 1px 1px inset; backdrop-filter: blur(12px); display: inline-flex; align-items: baseline; justify-content: center; gap: 4px;">
+                        <span id="hum-val" class="big-number hum-number"
+                            style="font-family: 'Plus Jakarta Sans', monospace; font-size: 58px; font-weight: 800; letter-spacing: -0.04em; line-height: 1; text-shadow: 0 0 20px rgba(0, 198, 255, 0.5), 0 0 40px rgba(0, 198, 255, 0.2);">62.0</span><span
+                            class="unit-label"
+                            style="font-size: 24px; font-weight: 700; color: #70d6ff; opacity: 0.9; margin-left: 2px; text-shadow: 0 0 12px rgba(0, 198, 255, 0.4);">%</span>
+                    </div>
+
+                    <!-- Condition Status Box -->
+                    <div id="hum-box" class="condition-box condition-hum">
+                        <div class="condition-info">
+                            <span id="hum-status" class="condition-title" style="color: #70d6ff;">
+                                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                    stroke-width="2.5">
+                                    <path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"></path>
+                                </svg>
+                                Tingkat Ideal
+                            </span>
+                            <span id="hum-desc" class="condition-desc">Kelembaban udara seimbang, higienis untuk
+                                respirasi.</span>
+                        </div>
+                        <span class="condition-pill pill-hum">Ideal</span>
+                    </div>
+
+                    <!-- Mini Stat Row -->
+                    <div class="mini-stat-row">
+                        <div class="mini-stat-card">
+                            <div class="mini-stat-label">Min (24 Jam)</div>
+                            <div id="h-min" class="mini-stat-value">51.0 %</div>
+                        </div>
+                        <div class="mini-stat-card">
+                            <div class="mini-stat-label">Rerata</div>
+                            <div id="h-avg" class="mini-stat-value">60.4 %</div>
+                        </div>
+                        <div class="mini-stat-card">
+                            <div class="mini-stat-label">Max (24 Jam)</div>
+                            <div id="h-max" class="mini-stat-value">74.5 %</div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+        </main>
+
+        <!-- 3. Historical Trend Analytics (Charts) -->
+        <section class="charts-grid">
+            <!-- Temperature History Chart Card -->
+            <div class="glass-card chart-card-inner">
+                <div class="chart-header">
+                    <div class="chart-title-wrap">
+                        <span class="chart-dot dot-temp"></span>
+                        <h3 class="chart-title">Grafik Tren Suhu (°C)</h3>
+                    </div>
+                    <span class="chart-badge">MicroSD Cache: 30 Mnt</span>
+                </div>
+                <div class="chart-canvas-container">
+                    <canvas id="tempChart" width="546" height="220"
+                        style="display: block; box-sizing: border-box; height: 220px; width: 546px;"></canvas>
+                </div>
+            </div>
+
+            <!-- Humidity History Chart Card -->
+            <div class="glass-card chart-card-inner">
+                <div class="chart-header">
+                    <div class="chart-title-wrap">
+                        <span class="chart-dot dot-hum"></span>
+                        <h3 class="chart-title">Grafik Tren Kelembaban (%)</h3>
+                    </div>
+                    <span class="chart-badge">MicroSD Cache: 30 Mnt</span>
+                </div>
+                <div class="chart-canvas-container">
+                    <canvas id="humChart" width="546" height="220"
+                        style="display: block; box-sizing: border-box; height: 220px; width: 546px;"></canvas>
+                </div>
+            </div>
+        </section>
+
+        <!-- 4. Threshold & Parameter Legend Panel -->
+        <section class="glass-card legend-card">
+            <div class="legend-header">
+                <div class="legend-title">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        style="color: #38bdf8;">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <line x1="12" y1="16" x2="12" y2="12"></line>
+                        <line x1="12" y1="8" x2="12.01" y2="8"></line>
+                    </svg>
+                    Parameter Ambang Batas Sensor DHT22
+                </div>
+                <span
+                    style="font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.05em;"
+                    class="">Standar Kenyamanan Termal ASHRAE</span>
+            </div>
+
             <div class="legend-grid">
-                <div class="legend-item"><span class="dot" style="background:#2ecc71"></span><div>10 - 23°C<br><span class="legend-label">Dingin</span></div></div>
-                <div class="legend-item"><span class="dot" style="background:#f1c40f"></span><div>24 - 29°C<br><span class="legend-label">Nyaman</span></div></div>
-                <div class="legend-item"><span class="dot" style="background:#e67e22"></span><div>30 - 35°C<br><span class="legend-label">Hangat</span></div></div>
-                <div class="legend-item"><span class="dot" style="background:#e74c3c"></span><div>36 - 42°C<br><span class="legend-label">Panas</span></div></div>
-            </div>
-        </div>
-        <div class="legend-section">
-            <div class="legend-sect-title"><span>💧</span> Keterangan Kelembaban</div>
-            <div class="legend-grid">
-                <div class="legend-item"><span class="dot" style="background:#00d2ff"></span><div>0 - 40%<br><span class="legend-label">Kering</span></div></div>
-                <div class="legend-item"><span class="dot" style="background:#0088ff"></span><div>41 - 70%<br><span class="legend-label">Ideal</span></div></div>
-                <div class="legend-item"><span class="dot" style="background:#0044ff"></span><div>71 - 100%<br><span class="legend-label">Lembab</span></div></div>
-            </div>
-        </div>
-    </div>
-    <div class="footer"> </div>
+                <!-- Temperature Thresholds -->
+                <div>
+                    <div class="legend-column-title">
+                        <span class="">🌡 Parameter Suhu Ruang</span>
+                    </div>
+                    <div class="legend-items">
+                        <div class="legend-pill-item">
+                            <span class="legend-dot" style="background: #38bdf8; box-shadow: 0 0 6px #38bdf8;"></span>
+                            <span class="legend-name">Dingin</span>
+                            <span class="legend-range">&lt; 21°C</span>
+                        </div>
+                        <div class="legend-pill-item">
+                            <span class="legend-dot" style="background: #10b981; box-shadow: 0 0 6px #10b981;"></span>
+                            <span class="legend-name">Nyaman</span>
+                            <span class="legend-range">21 - 27°C</span>
+                        </div>
+                        <div class="legend-pill-item">
+                            <span class="legend-dot" style="background: #f59e0b; box-shadow: 0 0 6px #f59e0b;"></span>
+                            <span class="legend-name">Hangat</span>
+                            <span class="legend-range">28 - 32°C</span>
+                        </div>
+                        <div class="legend-pill-item">
+                            <span class="legend-dot" style="background: #ef4444; box-shadow: 0 0 6px #ef4444;"></span>
+                            <span class="legend-name">Panas</span>
+                            <span class="legend-range">&gt; 32°C</span>
+                        </div>
+                    </div>
+                </div>
 
+                <!-- Humidity Thresholds -->
+                <div>
+                    <div class="legend-column-title">
+                        <span class="">💧 Parameter Kelembaban Udara</span>
+                    </div>
+                    <div class="legend-items">
+                        <div class="legend-pill-item">
+                            <span class="legend-dot" style="background: #fb923c; box-shadow: 0 0 6px #fb923c;"></span>
+                            <span class="legend-name">Kering</span>
+                            <span class="legend-range">&lt; 40%</span>
+                        </div>
+                        <div class="legend-pill-item">
+                            <span class="legend-dot" style="background: #00c6ff; box-shadow: 0 0 6px #00c6ff;"></span>
+                            <span class="legend-name">Ideal</span>
+                            <span class="legend-range">40 - 70%</span>
+                        </div>
+                        <div class="legend-pill-item" style="grid-column: span 2;">
+                            <span class="legend-dot" style="background: #6366f1; box-shadow: 0 0 6px #6366f1;"></span>
+                            <span class="legend-name">Lembab / Basah (Potensi Jamur)</span>
+                            <span class="legend-range">&gt; 70%</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Footer Meta -->
+        <footer class="system-footer">
+            <div class="footer-left">
+                <span class="footer-tag">⚡ <strong>MCU:</strong> ESP-WROOM-32</span>
+                <span class="footer-tag">💾 <strong>Storage:</strong> SPI MicroSD Module FAT32</span>
+                <span class="footer-tag">⏱ <strong>Interval:</strong> 2000 ms</span>
+            </div>
+            <div>
+                <span class="">Firmware v2.4.1-IoT • WebSockets &amp; REST Ready</span>
+            </div>
+        </footer>
+
+    </div>
+
+    <!-- Real-Time Logic & Chart.js Initialization -->
     <script>
-        const MAX_DATA_POINTS = 60; 
-        let counterSiklus = 0;      
-        const intervalPolling = 2;  
-
+        const MAX_DATA_POINTS = 60;
+        let counterSiklus = 0;
+        const intervalPolling = 2; // Polling sensor setiap 2 detik
         let waktuServerTerakhir = new Date();
 
-        const chartOptions = (yLabel, colorHex) => ({
-            responsive: true, maintainAspectRatio: false,
-            scales: {
-                x: { grid: { color: 'rgba(255, 255, 255, 0.03)' }, ticks: { color: '#778aa2', maxRotation: 45, minRotation: 45, font: { size: 10 } } },
-                y: { type: 'linear', display: true, title: { display: true, text: yLabel, color: colorHex }, grid: { color: 'rgba(255, 255, 255, 0.05)' }, ticks: { color: colorHex }, min: null, max: null }
-            },
-            plugins: { legend: { display: false } }
-        });
-
-        const ctxTemp = document.getElementById('tempChart').getContext('2d');
-        const tempChart = new Chart(ctxTemp, { type: 'line', data: { labels: [], datasets: [{ borderColor: '#e74c3c', backgroundColor: 'rgba(231, 76, 60, 0.1)', data: [], tension: 0.2, borderWidth: 2, fill: true }] }, options: chartOptions('Suhu (°C)', '#e74c3c') });
-
-        const ctxHum = document.getElementById('humChart').getContext('2d');
-        const humChart = new Chart(ctxHum, { type: 'line', data: { labels: [], datasets: [{ borderColor: '#3498db', backgroundColor: 'rgba(52, 152, 219, 0.1)', data: [], tension: 0.2, borderWidth: 2, fill: true }] }, options: chartOptions('Kelembaban (%)', '#3498db') });
-
-        function hitungStatistik() {
-            let tData = tempChart.data.datasets[0].data;
-            let hData = humChart.data.datasets[0].data;
-
-            if (tData.length > 0) {
-                let tMin = Math.min(...tData); let tMax = Math.max(...tData); let tAvg = tData.reduce((a, b) => a + b, 0) / tData.length;
-                document.getElementById('t-min').innerText = tMin.toFixed(1) + "°"; document.getElementById('t-max').innerText = tMax.toFixed(1) + "°"; document.getElementById('t-avg').innerText = tAvg.toFixed(1) + "°";
-            }
-            if (hData.length > 0) {
-                let hMin = Math.min(...hData); let hMax = Math.max(...hData); let hAvg = hData.reduce((a, b) => a + b, 0) / hData.length;
-                document.getElementById('h-min').innerText = hMin.toFixed(1) + "%"; document.getElementById('h-max').innerText = hMax.toFixed(1) + "%"; document.getElementById('h-avg').innerText = hAvg.toFixed(1) + "%";
-            }
-        }
-
-        async function muatDataHistorisDariSD() {
-            console.log("Mengunduh data historis dari Micro SD lokal...");
-            try {
-                let response = await fetch('/get-csv');
-                if(!response.ok) throw new Error("Gagal mengambil CSV");
-                
-                let teksCSV = await response.text();
-                let barisData = teksCSV.split("\n").filter(baris => baris.trim() !== "" && !baris.includes("Waktu"));
-                let dataTerbaru = barisData.slice(-MAX_DATA_POINTS);
-                
-                dataTerbaru.forEach(baris => {
-                    let kolom = baris.split(",");
-                    if(kolom.length >= 3) {
-                        tempChart.data.labels.push(kolom[0]);
-                        tempChart.data.datasets[0].data.push(parseFloat(kolom[1]));
-                        humChart.data.labels.push(kolom[0]);
-                        humChart.data.datasets[0].data.push(parseFloat(kolom[2]));
-                    }
-                });
-                
-                tempChart.update();
-                humChart.update();
-                hitungStatistik();
-                console.log("Data Micro SD sukses dimuat (Zero Latency).");
-            } catch (err) {
-                console.error("Micro SD Error:", err);
-            }
-        }
-
-        function getAngle(val, min, max) {
-            val = Math.max(min, Math.min(max, val));
-            return ((val - min) / (max - min) * 180) - 180; 
-        }
-
+        // 1. Digital Clock (Sinkronisasi dengan NTP ESP32)
         function detakJamLokal() {
             waktuServerTerakhir.setSeconds(waktuServerTerakhir.getSeconds() + 1);
-            
-            let j = String(waktuServerTerakhir.getHours()).padStart(2, '0');
-            let m = String(waktuServerTerakhir.getMinutes()).padStart(2, '0');
-            let d = String(waktuServerTerakhir.getSeconds()).padStart(2, '0');
-            
-            document.getElementById("live-time").innerText = `${j}:${m}:${d}`;
+            const hours = String(waktuServerTerakhir.getHours()).padStart(2, '0');
+            const minutes = String(waktuServerTerakhir.getMinutes()).padStart(2, '0');
+            const seconds = String(waktuServerTerakhir.getSeconds()).padStart(2, '0');
+            const clockEl = document.getElementById('live-time');
+            if (clockEl) {
+                clockEl.textContent = `${hours}:${minutes}:${seconds} WIB`;
+            }
         }
 
+        // 2. Chart.js Setup & Gradient
+        function createTempGradient(ctx) {
+            const grad = ctx.createLinearGradient(0, 0, 0, 200);
+            grad.addColorStop(0, 'rgba(255, 78, 80, 0.45)');
+            grad.addColorStop(1, 'rgba(255, 78, 80, 0.0)');
+            return grad;
+        }
+
+        function createHumGradient(ctx) {
+            const grad = ctx.createLinearGradient(0, 0, 0, 200);
+            grad.addColorStop(0, 'rgba(0, 198, 255, 0.4)');
+            grad.addColorStop(1, 'rgba(0, 198, 255, 0.0)');
+            return grad;
+        }
+
+        const commonChartOptions = {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    backgroundColor: 'rgba(15, 23, 42, 0.95)',
+                    titleFont: { family: 'Plus Jakarta Sans', size: 12 },
+                    bodyFont: { family: 'Inter', size: 13, weight: 'bold' },
+                    borderColor: 'rgba(255, 255, 255, 0.1)',
+                    borderWidth: 1,
+                    padding: 10,
+                    cornerRadius: 8,
+                    displayColors: false
+                }
+            },
+            scales: {
+                x: {
+                    grid: { color: 'rgba(255, 255, 255, 0.04)' },
+                    ticks: { color: '#64748b', font: { family: 'Inter', size: 10 }, maxRotation: 45, minRotation: 45 }
+                },
+                y: {
+                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    ticks: { color: '#64748b', font: { family: 'Inter', size: 11 } }
+                }
+            }
+        };
+
+        // Inisialisasi Chart Suhu
+        let tempChartInstance = null;
+        const tempCtx = document.getElementById('tempChart')?.getContext('2d');
+        if (tempCtx) {
+            tempChartInstance = new Chart(tempCtx, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: 'Suhu (°C)',
+                        data: [],
+                        borderColor: '#ff5252',
+                        borderWidth: 2.5,
+                        pointBackgroundColor: '#ff5252',
+                        pointBorderColor: '#ffffff',
+                        pointRadius: 2.5,
+                        pointHoverRadius: 5,
+                        fill: true,
+                        backgroundColor: createTempGradient(tempCtx),
+                        tension: 0.38
+                    }]
+                },
+                options: {
+                    ...commonChartOptions,
+                    scales: {
+                        ...commonChartOptions.scales,
+                        y: {
+                            ...commonChartOptions.scales.y,
+                            suggestedMin: 20,
+                            suggestedMax: 40,
+                            ticks: {
+                                ...commonChartOptions.scales.y.ticks,
+                                callback: function (val) { return val + '°C'; }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Inisialisasi Chart Kelembaban
+        let humChartInstance = null;
+        const humCtx = document.getElementById('humChart')?.getContext('2d');
+        if (humCtx) {
+            humChartInstance = new Chart(humCtx, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: 'Kelembaban (%)',
+                        data: [],
+                        borderColor: '#00c6ff',
+                        borderWidth: 2.5,
+                        pointBackgroundColor: '#00c6ff',
+                        pointBorderColor: '#ffffff',
+                        pointRadius: 2.5,
+                        pointHoverRadius: 5,
+                        fill: true,
+                        backgroundColor: createHumGradient(humCtx),
+                        tension: 0.38
+                    }]
+                },
+                options: {
+                    ...commonChartOptions,
+                    scales: {
+                        ...commonChartOptions.scales,
+                        y: {
+                            ...commonChartOptions.scales.y,
+                            suggestedMin: 30,
+                            suggestedMax: 90,
+                            ticks: {
+                                ...commonChartOptions.scales.y.ticks,
+                                callback: function (val) { return val + '%'; }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // 3. Visualisasi Speedometer Gauge (Jarum & Arc)
+        function updateTempVisual(temp) {
+            const clamped = Math.max(0, Math.min(60, temp));
+            const angle = -90 + (clamped / 60) * 180;
+            const needle = document.getElementById('tempNeedle');
+            if (needle) {
+                needle.style.transform = `rotate(${angle}deg)`;
+            }
+
+            const arc = document.getElementById('tempArc');
+            if (arc) {
+                const offset = 283 - (clamped / 60) * 283;
+                arc.style.strokeDashoffset = offset;
+            }
+        }
+
+        function updateHumVisual(hum) {
+            const clamped = Math.max(0, Math.min(100, hum));
+            const angle = -90 + (clamped / 100) * 180;
+            const needle = document.getElementById('humNeedle');
+            if (needle) {
+                needle.style.transform = `rotate(${angle}deg)`;
+            }
+
+            const arc = document.getElementById('humArc');
+            if (arc) {
+                const offset = 283 - (clamped / 100) * 283;
+                arc.style.strokeDashoffset = offset;
+            }
+        }
+
+        // 4. Kalkulasi Otomatis Statistik (Min, Rerata, Max)
+        function hitungStatistik() {
+            if (!tempChartInstance || !humChartInstance) return;
+            const tData = tempChartInstance.data.datasets[0].data;
+            const hData = humChartInstance.data.datasets[0].data;
+
+            if (tData.length > 0) {
+                const tMin = Math.min(...tData);
+                const tMax = Math.max(...tData);
+                const tAvg = tData.reduce((a, b) => a + b, 0) / tData.length;
+                const elMin = document.getElementById('t-min'); if (elMin) elMin.innerText = tMin.toFixed(1) + " °C";
+                const elMax = document.getElementById('t-max'); if (elMax) elMax.innerText = tMax.toFixed(1) + " °C";
+                const elAvg = document.getElementById('t-avg'); if (elAvg) elAvg.innerText = tAvg.toFixed(1) + " °C";
+            }
+
+            if (hData.length > 0) {
+                const hMin = Math.min(...hData);
+                const hMax = Math.max(...hData);
+                const hAvg = hData.reduce((a, b) => a + b, 0) / hData.length;
+                const elHMin = document.getElementById('h-min'); if (elHMin) elHMin.innerText = hMin.toFixed(1) + " %";
+                const elHMax = document.getElementById('h-max'); if (elHMax) elHMax.innerText = hMax.toFixed(1) + " %";
+                const elHAvg = document.getElementById('h-avg'); if (elHAvg) elHAvg.innerText = hAvg.toFixed(1) + " %";
+            }
+        }
+
+        // 5. Mengunduh Data Historis Hari Ini dari MicroSD (/get-csv)
+        async function muatDataHistorisDariSD() {
+            if (!tempChartInstance || !humChartInstance) return;
+            try {
+                const response = await fetch('/get-csv');
+                if (!response.ok) throw new Error("Gagal mengambil CSV");
+
+                const teksCSV = await response.text();
+                const barisData = teksCSV.split("\n").filter(baris => baris.trim() !== "" && !baris.includes("Waktu"));
+                const dataTerbaru = barisData.slice(-MAX_DATA_POINTS);
+
+                dataTerbaru.forEach(baris => {
+                    const kolom = baris.split(",");
+                    if (kolom.length >= 3) {
+                        tempChartInstance.data.labels.push(kolom[0]);
+                        tempChartInstance.data.datasets[0].data.push(parseFloat(kolom[1]));
+                        humChartInstance.data.labels.push(kolom[0]);
+                        humChartInstance.data.datasets[0].data.push(parseFloat(kolom[2]));
+                    }
+                });
+
+                tempChartInstance.update();
+                humChartInstance.update();
+                hitungStatistik();
+            } catch (err) {
+                console.warn("Log SD belum tersedia atau ESP32 baru dinyalakan:", err);
+            }
+        }
+
+        // 6. Polling Realtime Sensor DHT22 (/data)
         function updateDashboard() {
             fetch('/data')
-                .then(response => response.json())
+                .then(res => res.json())
                 .then(data => {
-                    if(data.error) return;
-                    let t = data.temp; let h = data.hum; let hi = data.hi; let timeStr = data.time;
-                    
-                    document.getElementById("temp-val").innerText = t.toFixed(1);
-                    document.getElementById("hum-val").innerText = h.toFixed(1);
-                    document.getElementById("hi-val").innerText = hi.toFixed(1) + " °C";
+                    if (data.error) return;
+                    const t = data.temp;
+                    const h = data.hum;
+                    const hi = data.hi;
+                    const timeStr = data.time;
 
-                    let bagianWaktu = timeStr.split(":");
-                    if(bagianWaktu.length === 3) {
+                    // Update Nilai Display
+                    const elTemp = document.getElementById("temp-val"); if (elTemp) elTemp.innerText = t.toFixed(1);
+                    const elHum = document.getElementById("hum-val"); if (elHum) elHum.innerText = h.toFixed(1);
+                    const elHi = document.getElementById("hi-val"); if (elHi) elHi.innerText = hi.toFixed(1) + "°C";
+
+                    // Sinkronisasi Waktu Server
+                    const bagianWaktu = timeStr.split(":");
+                    if (bagianWaktu.length === 3) {
                         waktuServerTerakhir.setHours(parseInt(bagianWaktu[0]), parseInt(bagianWaktu[1]), parseInt(bagianWaktu[2]));
                     }
 
-                    document.getElementById("tempNeedle").style.transform = `rotate(${getAngle(t, 10, 42)}deg)`;
-                    document.getElementById("humNeedle").style.transform = `rotate(${getAngle(h, 0, 100)}deg)`;
+                    // Putar Jarum & Isi Progress Arc Speedometer
+                    updateTempVisual(t);
+                    updateHumVisual(h);
 
-                    let tBox = document.getElementById("temp-box"); let tStatus = document.getElementById("temp-status"); let tDesc = document.getElementById("temp-desc"); tBox.className = "status-box";
-                    if(t <= 23) { tStatus.innerText = "Dingin"; tDesc.innerText = "Suhu ruangan dingin"; tBox.classList.add("status-dingin"); }
-                    else if(t <= 29) { tStatus.innerText = "Nyaman"; tDesc.innerText = "Suhu ruangan normal"; tBox.classList.add("status-nyaman"); }
-                    else if(t <= 35) { tStatus.innerText = "Hangat"; tDesc.innerText = "Suhu ruangan hangat"; tBox.classList.add("status-hangat"); }
-                    else { tStatus.innerText = "Panas"; tDesc.innerText = "Suhu ruangan tinggi"; tBox.classList.add("status-panas"); }
-
-                    let hBox = document.getElementById("hum-box"); let hStatus = document.getElementById("hum-status"); let hDesc = document.getElementById("hum-desc"); hBox.className = "status-box";
-                    if(h <= 40) { hStatus.innerText = "Kering"; hDesc.innerText = "Kelembaban rendah"; hBox.classList.add("status-kering"); }
-                    else if(h <= 70) { hStatus.innerText = "Ideal"; hDesc.innerText = "Kelembaban normal"; hBox.classList.add("status-ideal"); }
-                    else { hStatus.innerText = "Lembab"; hDesc.innerText = "Kelembaban tinggi"; hBox.classList.add("status-lembab"); }
-
-                    if (counterSiklus === 0 || counterSiklus >= 60) {
-                        counterSiklus = 1; 
-                        let adaDataBaru = false;
-
-                        if(!tempChart.data.labels.includes(timeStr)){
-                            tempChart.data.labels.push(timeStr); tempChart.data.datasets[0].data.push(t);
-                            if (tempChart.data.labels.length > MAX_DATA_POINTS) { tempChart.data.labels.shift(); tempChart.data.datasets[0].data.shift(); }
-                            tempChart.update(); adaDataBaru = true;
+                    // Update Status & Badge Suhu
+                    const elTStatus = document.getElementById("temp-status");
+                    const elTDesc = document.getElementById("temp-desc");
+                    const elTPill = document.querySelector("#temp-box .condition-pill");
+                    if (elTStatus && elTDesc) {
+                        if (t <= 23) {
+                            elTStatus.innerHTML = `❄ Dingin`;
+                            elTDesc.innerText = "Suhu ruangan dingin, pertimbangkan ventilasi.";
+                            if (elTPill) elTPill.innerText = "Dingin";
+                        } else if (t <= 29) {
+                            elTStatus.innerHTML = `🌿 Optimal / Nyaman`;
+                            elTDesc.innerText = "Temperatur ruangan dalam rentang normal dan sejuk.";
+                            if (elTPill) elTPill.innerText = "Normal";
+                        } else if (t <= 35) {
+                            elTStatus.innerHTML = `🔥 Hangat`;
+                            elTDesc.innerText = "Temperatur agak hangat, hidupkan sirkulasi udara.";
+                            if (elTPill) elTPill.innerText = "Hangat";
+                        } else {
+                            elTStatus.innerHTML = `⚠ Panas`;
+                            elTDesc.innerText = "Suhu ruangan tinggi! Bahaya overheat / dehidrasi.";
+                            if (elTPill) elTPill.innerText = "Tinggi";
                         }
+                    }
 
-                        if(!humChart.data.labels.includes(timeStr)){
-                            humChart.data.labels.push(timeStr); humChart.data.datasets[0].data.push(h);
-                            if (humChart.data.labels.length > MAX_DATA_POINTS) { humChart.data.labels.shift(); humChart.data.datasets[0].data.shift(); }
-                            humChart.update(); adaDataBaru = true;
+                    // Update Status & Badge Kelembaban
+                    const elHStatus = document.getElementById("hum-status");
+                    const elHDesc = document.getElementById("hum-desc");
+                    const elHPill = document.querySelector("#hum-box .condition-pill");
+                    if (elHStatus && elHDesc) {
+                        if (h <= 40) {
+                            elHStatus.innerHTML = `🌵 Udara Kering`;
+                            elHDesc.innerText = "Kelembaban rendah, dapat menyebabkan kulit & mata kering.";
+                            if (elHPill) elHPill.innerText = "Kering";
+                        } else if (h <= 70) {
+                            elHStatus.innerHTML = `💧 Tingkat Ideal`;
+                            elHDesc.innerText = "Kelembaban udara seimbang, higienis untuk respirasi.";
+                            if (elHPill) elHPill.innerText = "Ideal";
+                        } else {
+                            elHStatus.innerHTML = `🌧 Lembab / Basah`;
+                            elHDesc.innerText = "Kelembaban tinggi, potensi timbul jamur & bau apek.";
+                            if (elHPill) elHPill.innerText = "Lembab";
                         }
+                    }
 
-                        if(adaDataBaru) hitungStatistik();
-                    } else {
-                        counterSiklus++;
+                    // Update Titik Data Grafik (Setiap 60 siklus = 1 menit)
+                    if (tempChartInstance && humChartInstance) {
+                        if (counterSiklus === 0 || counterSiklus >= 30) {
+                            counterSiklus = 1;
+                            let adaDataBaru = false;
+
+                            if (!tempChartInstance.data.labels.includes(timeStr)) {
+                                tempChartInstance.data.labels.push(timeStr);
+                                tempChartInstance.data.datasets[0].data.push(t);
+                                if (tempChartInstance.data.labels.length > MAX_DATA_POINTS) {
+                                    tempChartInstance.data.labels.shift();
+                                    tempChartInstance.data.datasets[0].data.shift();
+                                }
+                                tempChartInstance.update();
+                                adaDataBaru = true;
+                            }
+
+                            if (!humChartInstance.data.labels.includes(timeStr)) {
+                                humChartInstance.data.labels.push(timeStr);
+                                humChartInstance.data.datasets[0].data.push(h);
+                                if (humChartInstance.data.labels.length > MAX_DATA_POINTS) {
+                                    humChartInstance.data.labels.shift();
+                                    humChartInstance.data.datasets[0].data.shift();
+                                }
+                                humChartInstance.update();
+                                adaDataBaru = true;
+                            }
+
+                            if (adaDataBaru) hitungStatistik();
+                        } else {
+                            counterSiklus++;
+                        }
                     }
                 })
-                .catch(err => console.error("Gagal polling data:", err));
+                .catch(err => console.error("Gagal polling data ESP32:", err));
         }
 
+        // 7. Siklus Inisialisasi
         async function inisialisasiSistem() {
-            await muatDataHistorisDariSD(); 
-            updateDashboard();
-            
             setInterval(detakJamLokal, 1000);
-            
+            await muatDataHistorisDariSD();
+            updateDashboard();
             setInterval(updateDashboard, intervalPolling * 1000);
         }
 
         inisialisasiSistem();
     </script>
+
+
+
+
+
 </body>
+
 </html>
